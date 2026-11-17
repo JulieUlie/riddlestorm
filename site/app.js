@@ -260,17 +260,35 @@
     r0: 0.16 + Math.pow(rnd(), 0.75) * 0.86, a: rnd() * Math.PI * 2,
     sp: 0.6 + rnd() * 0.8, ph: rnd() * 6.28, x: 0, y: 0, w: 0, frozen: false, glow: 0, show: true, keep: rnd()
   }));
-  const streaks = Array.from({ length: 150 }, () => ({
-    r: 0.04 + rnd() * 1.1, a: rnd() * Math.PI * 2, sp: 0.7 + rnd() * 1.6, len: 0.05 + rnd() * 0.16, al: 0.04 + rnd() * 0.1
+  const streaks = Array.from({ length: 110 }, () => ({
+    r: 0.04 + rnd() * 1.1, a: rnd() * Math.PI * 2, sp: 0.7 + rnd() * 1.6, len: 0.05 + rnd() * 0.16, bucket: Math.floor(rnd() * 3)
   }));
 
   const nodeFont = n => `600 ${n.fs}px ${SANS}`;
   const fragFont = f => `${f.it.kind === 'riddle' ? 'italic ' : ''}${Math.round(13 * k + 1)}px ${SERIF}`;
 
+  // Text, emoji and glows are drawn once into small canvases and reused every frame:
+  // blur and colour filters are the expensive part of canvas text, so they are baked in here.
+  function sprite(text, font, color, { blur = 0, glow = '', filter = '', size = 14 } = {}) {
+    ctx.font = font;
+    const pad = Math.ceil(blur * 1.2) + 4;
+    const w = Math.ceil(ctx.measureText(text).width) + pad * 2, h = Math.ceil(size * 1.5) + pad * 2;
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(w * dpr); c.height = Math.ceil(h * dpr);
+    const g = c.getContext('2d');
+    g.scale(dpr, dpr);
+    g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = color;
+    if (filter) g.filter = filter;
+    if (blur) { g.shadowColor = glow; g.shadowBlur = blur; }
+    g.fillText(text, w / 2, h / 2);
+    return { c, w, h };
+  }
+  const blit = (sp, x, y) => ctx.drawImage(sp.c, x - sp.w / 2, y - sp.h / 2, sp.w, sp.h);
+
   function resize() {
     const r = stormEl.getBoundingClientRect();
     W = r.width; H = r.height;
-    dpr = Math.min(2, window.devicePixelRatio || 1);
+    dpr = Math.min(1.5, window.devicePixelRatio || 1);
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     k = clamp(W / 1300, 0.78, 1.1);
@@ -278,7 +296,16 @@
 
     // measure
     const small = W < 720;
-    frags.forEach(f => { f.show = !small || f.keep < 0.5; ctx.font = fragFont(f); f.w = ctx.measureText(f.label).width; });
+    const fsz = Math.round(13 * k + 1);
+    frags.forEach(f => {
+      f.show = !small || f.keep < 0.5;
+      ctx.font = fragFont(f); f.w = ctx.measureText(f.label).width;
+      if (!f.show) return;
+      const rgb = f.it.kind === 'riddle' ? '169,196,238' : '240,205,150';
+      const txt = f.it.kind === 'saying' ? '\u201c' + f.label + '\u201d' : f.label;
+      f.spr = sprite(txt, fragFont(f), `rgb(${rgb})`, { size: fsz });
+      f.sprGlow = sprite(txt, fragFont(f), `rgb(${rgb})`, { size: fsz, blur: 12, glow: `rgba(${rgb},.8)` });
+    });
     const spanX = W < 720 ? W * 0.4 : W * 0.37, spanY = H * 0.29;
     nodes.forEach(n => {
       n.show = n.s.rank <= (small ? STORM_N_SMALL : STORM_N);
@@ -288,6 +315,12 @@
       n.top = n.fs * 0.75 + n.fs * 1.2;
       n.bot = n.fs * 0.45;
       n.x = cx + n.nx * spanX; n.y = cy + n.ny * spanY;
+      if (!n.show) return;
+      const esz = Math.round(n.fs * 1.05), ef = `${esz}px ${EMOF}`;
+      n.emo = sprite(symOf(n.id), ef, '#fff', { size: esz, filter: EMO_TINT, blur: isHigh(n.id) ? 8 : 4, glow: 'rgba(240,201,106,.55)' });
+      n.emoLit = sprite(symOf(n.id), ef, '#fff', { size: esz, blur: 22, glow: 'rgba(143,184,255,.9)' });
+      n.lab = sprite(label(n.id), nodeFont(n), 'rgb(230,235,245)', { size: n.fs, blur: 8, glow: 'rgba(7,10,18,.9)' });
+      n.labLit = sprite(label(n.id), nodeFont(n), '#fff', { size: n.fs, blur: 20, glow: '#8fb8ff' });
     });
 
     // push labels apart, keep them clear of the intro text and the bottom bar
@@ -482,11 +515,16 @@
 
     // wind streaks
     ctx.lineCap = 'round'; ctx.lineWidth = 1;
-    for (const s of streaks) {
-      s.a += dt * speed * s.sp * 0.16 / Math.sqrt(s.r);
-      ctx.strokeStyle = `rgba(150,180,230,${s.al})`;
+    for (let b = 0; b < 3; b++) {
+      ctx.strokeStyle = `rgba(150,180,230,${0.05 + b * 0.035})`;
       ctx.beginPath();
-      ctx.ellipse(cx, cy, s.r * rx, s.r * ry, 0, s.a - s.len / Math.sqrt(s.r), s.a);
+      for (const s of streaks) {
+        if (s.bucket !== b) continue;
+        s.a += dt * speed * s.sp * 0.16 / Math.sqrt(s.r);
+        const a0 = s.a - s.len / Math.sqrt(s.r);
+        ctx.moveTo(cx + Math.cos(a0) * s.r * rx, cy + Math.sin(a0) * s.r * ry);
+        ctx.ellipse(cx, cy, s.r * rx, s.r * ry, 0, a0, s.a);
+      }
       ctx.stroke();
     }
 
@@ -505,27 +543,22 @@
     if (fn && fn.show && focusStrength > 0) {
       const n = fn;
       ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(143,184,255,${0.28 * focusStrength})`;
+      ctx.beginPath();
       for (const f of frags) if (f.show && f.glow > 0.05) {
-        ctx.strokeStyle = `rgba(143,184,255,${0.28 * f.glow})`;
-        ctx.beginPath(); ctx.moveTo(n.x, n.y - n.fs * 0.3);
+        ctx.moveTo(n.x, n.y - n.fs * 0.3);
         ctx.quadraticCurveTo((n.x + f.x) / 2, (n.y + f.y) / 2 - 30, f.x, f.y);
-        ctx.stroke();
       }
+      ctx.stroke();
     }
 
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const f of frags) {
-      if (!f.show) continue;
+      if (!f.show || !f.spr) continue;
       const isHover = f === hover || f === pinned;
-      let a = focus ? 0.13 + 0.85 * f.glow : 0.27;
-      if (isHover) a = 1;
-      ctx.font = fragFont(f);
-      const col = f.it.kind === 'riddle' ? '169,196,238' : '240,205,150';
-      if (f.glow > 0.3 || isHover) { ctx.shadowColor = `rgba(${col},.8)`; ctx.shadowBlur = 12; }
-      ctx.fillStyle = `rgba(${col},${a})`;
-      ctx.fillText(f.it.kind === 'saying' ? `“${f.label}”` : f.label, f.x, f.y);
-      ctx.shadowBlur = 0;
+      ctx.globalAlpha = isHover ? 1 : focus ? 0.13 + 0.85 * f.glow : 0.27;
+      blit(f.glow > 0.3 || isHover ? f.sprGlow : f.spr, f.x, f.y);
     }
+    ctx.globalAlpha = 1;
 
     // bolts
     if (lit && !reduce && (le < 0.09 || (le > 0.14 && le < 0.34))) {
@@ -547,21 +580,15 @@
         ctx.fillStyle = g;
         ctx.fillRect(n.x - n.w - 60, y - n.top - 60, n.w * 2 + 120, n.top + 120);
       }
-      // symbol: gold-tinted emoji; it takes its true colours while the word is lit
-      ctx.font = `${Math.round(n.fs * 1.05)}px ${EMOF}`;
-      ctx.globalAlpha = (isHigh(n.id) ? 0.95 : 0.8) * dim;
-      if (n.glow < 0.5) ctx.filter = EMO_TINT;
-      ctx.shadowColor = n.glow > 0.05 ? 'rgba(143,184,255,.9)' : 'rgba(240,201,106,.55)';
-      ctx.shadowBlur = (isHigh(n.id) ? 8 : 4) + 18 * n.glow;
-      ctx.fillText(symOf(n.id), n.x, y - n.fs * 1.12);
-      ctx.filter = 'none'; ctx.globalAlpha = 1;
-      ctx.font = nodeFont(n);
-      ctx.shadowColor = n.glow > 0.05 ? '#8fb8ff' : 'rgba(7,10,18,.9)';
-      ctx.shadowBlur = n.glow > 0.05 ? 20 * n.glow : 8;
-      const base = 0.6 + n.s.score * 0.004;
-      ctx.fillStyle = `rgba(${on ? '255,255,255' : '230,235,245'},${Math.min(1, base + 0.4 * n.glow) * dim})`;
-      ctx.fillText(label(n.id), n.x, y);
-      ctx.shadowBlur = 0;
+      if (!n.emo) continue;
+      // symbol: gold-tinted emoji; it crossfades to its true colours while the word is lit
+      const ey = y - n.fs * 1.12, ea = (isHigh(n.id) ? 0.95 : 0.8) * dim;
+      if (n.glow < 0.98) { ctx.globalAlpha = ea * (1 - n.glow); blit(n.emo, n.x, ey); }
+      if (n.glow > 0.02) { ctx.globalAlpha = n.glow; blit(n.emoLit, n.x, ey); }
+      const la = Math.min(1, 0.6 + n.s.score * 0.004) * dim;
+      if (n.glow < 0.98) { ctx.globalAlpha = la * (1 - n.glow); blit(n.lab, n.x, y); }
+      if (n.glow > 0.02) { ctx.globalAlpha = n.glow; blit(n.labLit, n.x, y); }
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -584,13 +611,13 @@
   /* ================= loader ================= */
   function runLoader() {
     const el = $('#loader'), c = $('#loaderCanvas'), g = c.getContext('2d');
-    const total = reduce ? 1200 : 3800, litAt = reduce ? 150 : 2650;
+    const total = reduce ? 500 : 1250, litAt = reduce ? 80 : 780;
     let done = false;
     document.body.classList.add('loading');
     // Always start at the storm, and never leave the loader up if frames are throttled.
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
     if (!location.hash) scrollTo(0, 0);
-    setTimeout(() => finish(), total + 400);
+    setTimeout(() => finish(), total + 200);
 
     const words = [];
     items.forEach(it => it.text.split(/\s+/).forEach(w => {
@@ -686,7 +713,7 @@
       removeEventListener('resize', size);
       started = true;
       nextStrike = performance.now() + 700;
-      setTimeout(() => el.remove(), 650);
+      setTimeout(() => el.remove(), 350);
     }
     $('#skip').addEventListener('click', finish);
     el.addEventListener('click', finish);

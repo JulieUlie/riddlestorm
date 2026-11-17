@@ -2,7 +2,7 @@
 
 **Live:** https://riddlestorm.julietous.workers.dev/ · part of [my web apps](https://apps.julietous.workers.dev/)
 
-![Riddlestorm banner](site/og-20261117b.jpg)
+![Riddlestorm banner](site/og-20261117c.jpg)
 
 A storm of riddles and sayings from many cultures. Lightning lights up the words they keep returning to, so you can see which words carry the most symbolic weight, and what that weight could mean for ideas and business.
 
@@ -30,5 +30,5 @@ Riddle and saying texts are short retellings of traditional sources (named per i
 
 ## Versions
 
-- **v2** (17 Nov 2026): 50 words (was 25), 79 sayings (was 15) and 53 riddles from 25 cultures; an emoji symbol for every word; searchable word atlas.
+- **v2** (17 Nov 2026): 50 words (was 25), 79 sayings (was 15) and 53 riddles from 25 cultures; an emoji symbol for every word; searchable word atlas; a 1.5 s intro (was 4 s); faster drawing (text, emoji and glows are cached as small images, so a frame costs under 1 ms of script time).
 - **v1** (17 Nov 2026): first release.
