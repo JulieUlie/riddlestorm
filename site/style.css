@@ -116,7 +116,7 @@ button { font: inherit; color: inherit; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .dot.riddle { background: var(--riddle); }
 .dot.saying { background: var(--saying); }
-.legend .sym { font-style: normal; font-family: var(--sym); color: var(--gold); }
+.legend .emo { font-style: normal; }
 
 .tip {
   position: absolute; z-index: 5; width: min(340px, calc(100vw - 32px));
@@ -249,3 +249,29 @@ code { font-size: 15px; background: var(--bg-3); padding: 1px 6px; border-radius
   html { scroll-behavior: auto; }
   .loader, .loader-title { transition: none; }
 }
+
+/* ---------- emoji symbols ---------- */
+.emo {
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  font-style: normal;
+  filter: sepia(.75) saturate(1.5) hue-rotate(-8deg) brightness(1.05);
+}
+.emo.lit, .chip:hover .emo, .rank button:hover .emo { filter: none; }
+.chip .emo { font-size: 14px; }
+.rank .r-sym { font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; font-size: 22px; }
+.rank .r-evokes { display: block; color: var(--muted); font-size: 14px; }
+.d-sym { font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; text-shadow: none; }
+.d-sign { font-family: var(--sym); color: var(--gold); font-size: 20px; margin-right: 8px; vertical-align: -2px; }
+.strike .s-sym { font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; }
+
+/* ---------- atlas search ---------- */
+.atlas-bar { display: flex; align-items: center; gap: 16px; margin: -12px 0 20px; flex-wrap: wrap; }
+.atlas-search { flex: 1 1 320px; max-width: 32rem; }
+.atlas-search input {
+  width: 100%; font: 16px var(--sans); color: var(--text);
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px;
+}
+.atlas-search input:focus { outline: none; border-color: var(--glow); box-shadow: 0 0 0 3px rgba(143,184,255,.18); }
+.atlas-count { color: var(--muted); font-size: 14px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rank li[hidden] { display: none; }

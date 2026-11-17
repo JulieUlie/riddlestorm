@@ -16,7 +16,8 @@ const page = await browser.newPage({ viewport: { width: 1200, height: 630 } });
 await page.goto('http://127.0.0.1:8131/', { waitUntil: 'networkidle' });
 await page.evaluate(() => document.fonts.ready);
 await page.keyboard.press('Escape');               // skip the loader
-await page.waitForTimeout(1600);
+await page.waitForSelector('#loader', { state: 'detached', timeout: 15000 });
+await page.waitForTimeout(1100);                   // let the first automatic strike pass
 await page.addStyleTag({ content: `
   .top, .storm-intro, .legend, .strike, .tip { display: none !important; }
   .og { position: absolute; right: 48px; bottom: 44px; z-index: 9; width: 510px;
@@ -28,14 +29,14 @@ await page.addStyleTag({ content: `
   .og .chips { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
   .og .chips span { font: 500 15px "IBM Plex Sans", sans-serif; color: #e6ebf5; border: 1px solid #3a4a70;
     border-radius: 99px; padding: 4px 12px; background: #0d1322; }
-  .og .chips b { font-family: "Noto Sans Symbols 2", "Noto Sans Symbols", serif; color: #f0c96a; font-weight: 400; }
+  .og .chips b { font-family: "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-weight: 400; margin-right: 4px; filter: sepia(.75) saturate(1.5) hue-rotate(-8deg) brightness(1.05); }
 ` });
 await page.evaluate(() => {
   const d = document.createElement('div');
   d.className = 'og';
   d.innerHTML = `<h1>Riddlestorm</h1>
     <p>Riddles and sayings from many cultures. Lightning shows which words matter most.</p>
-    <div class="chips"><span>${RS.riddles} riddles</span><span>${RS.sayings} sayings</span><span>${RS.cultureCount} cultures</span><span><b>♄ ☥ ☿</b> symbols</span></div>`;
+    <div class="chips"><span>${RS.riddles} riddles</span><span>${RS.sayings} sayings</span><span>${RS.cultureCount} cultures</span><span><b>⏳🪶🗝️</b> ${RS.words} words</span></div>`;
   document.querySelector('#storm').appendChild(d);
   RS.strike('time');
 });

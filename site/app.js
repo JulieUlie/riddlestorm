@@ -5,6 +5,9 @@
   const SYMF = '"Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", serif';
   const SANS = '"IBM Plex Sans", system-ui, sans-serif';
   const SERIF = 'Spectral, Georgia, serif';
+  const EMOF = '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+  // Emoji are tinted gold so they sit in the storm's palette; a lit word shows its true colours.
+  const EMO_TINT = 'sepia(0.75) saturate(1.5) hue-rotate(-8deg) brightness(1.05)';
   const $ = s => document.querySelector(s);
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -17,12 +20,16 @@
   const ids = Object.keys(D.concepts);
   const items = [
     ...D.riddles.map((r, i) => ({ id: 'r' + i, kind: 'riddle', text: r.q, orig: r.o, answer: r.a, culture: r.c, src: r.src, m: r.m })),
-    ...D.sayings.map((s, i) => ({ id: 's' + i, kind: 'saying', text: s.t, orig: s.o, answer: s.n, culture: s.c, src: s.src || 'Saying', m: s.m }))
+    ...D.sayings.map((s, i) => ({ id: 's' + i, kind: 'saying', text: s.t, orig: s.o !== s.t ? s.o : '', answer: s.n, culture: s.c, src: s.src || 'Saying', m: s.m }))
   ];
   items.forEach(it => it.m.forEach(k => { if (!D.concepts[k]) console.warn('Unknown meaning', k, 'in', it.id); }));
 
   const langOf = {};
   D.languages.forEach(L => L.cultures.forEach(c => { langOf[c] = L; }));
+  const langAttr = c => {
+    const code = langOf[c] ? langOf[c].code : (D.codes[c] || '');
+    return `${code ? ` lang="${code}"` : ''}${D.rtl.includes(c) ? ' dir="rtl"' : ''}`;
+  };
 
   const stats = {};
   ids.forEach(id => { stats[id] = { id, items: [], cultures: new Map(), links: new Map() }; });
@@ -41,22 +48,25 @@
   ids.forEach(id => { stats[id].score = Math.round(100 * stats[id].raw / maxRaw); });
   const ranked = ids.slice().sort((a, b) => stats[b].raw - stats[a].raw || a.localeCompare(b));
   ranked.forEach((id, i) => { stats[id].rank = i + 1; });
-  const HIGH = 12; // words that get their symbol in the storm and ranking
+  const HIGH = 12; // the most symbolic words (gold score, extra glow)
   const isHigh = id => stats[id].rank <= HIGH;
-  const symOf = id => D.symbols[id][0];
+  const symOf = id => D.concepts[id].e;
   const label = id => D.concepts[id].label;
   const cultureCount = new Set(items.map(i => i.culture)).size;
 
   /* ================= static sections ================= */
-  const chip = id => `<button type="button" class="chip" data-word="${id}">${isHigh(id) ? `<span class="c-sym">${symOf(id)}</span>` : ''}${esc(label(id))}</button>`;
+  const chip = id => `<button type="button" class="chip" data-word="${id}"><span class="emo">${symOf(id)}</span>${esc(label(id))}</button>`;
 
   $('#rankList').innerHTML = ranked.map(id => {
     const s = stats[id];
-    return `<li class="${isHigh(id) ? 'hi' : ''}"><button type="button" data-word="${id}">
+    const c = D.concepts[id];
+    const hay = [c.label, ...c.evokes, ...c.angles, c.note].join(' ').toLowerCase();
+    return `<li class="${isHigh(id) ? 'hi' : ''}" data-hay="${esc(hay)}"><button type="button" data-word="${id}">
       <span class="r-n">${s.rank}</span>
-      <span class="r-sym" aria-hidden="true">${isHigh(id) ? symOf(id) : ''}</span>
+      <span class="r-sym emo" aria-hidden="true">${symOf(id)}</span>
       <span class="r-main"><span class="r-word">${esc(label(id))}</span>
         <span class="r-meta">${s.R} uses · ${s.C} cultures · ${s.B} links</span>
+        <span class="r-evokes">${c.evokes.map(esc).join(' · ')}</span>
         <span class="r-bar"><i style="width:${s.score}%"></i></span></span>
       <span class="r-score">${s.score}</span></button></li>`;
   }).join('');
@@ -83,6 +93,20 @@
     </article>`;
   }).join('');
 
+  // Atlas search: word, what it evokes, opportunities, symbol note.
+  const search = $('#atlasSearch'), atlasCount = $('#atlasCount');
+  const filterAtlas = () => {
+    const q = search.value.trim().toLowerCase();
+    let n = 0;
+    document.querySelectorAll('#rankList li').forEach(li => {
+      const hit = !q || li.dataset.hay.includes(q);
+      li.hidden = !hit; if (hit) n++;
+    });
+    atlasCount.textContent = q ? `${n} of ${ids.length} words` : `${ids.length} words`;
+  };
+  search.addEventListener('input', filterAtlas);
+  filterAtlas();
+
   $('#countLine').textContent = `${D.riddles.length} riddles and ${D.sayings.length} sayings from ${cultureCount} cultures, tagged with ${ids.length} meanings.`;
 
   /* ================= drawer + mind map ================= */
@@ -98,7 +122,7 @@
     const br = [
       { t: 'Evokes', col: '#8fb8ff', leaves: c.evokes.map(t => ({ t })) },
       { t: 'Opportunities', col: '#f0c96a', leaves: c.angles.map(t => ({ t })) },
-      { t: 'Linked words', col: '#a9c4ee', leaves: linked.map(([b]) => ({ t: (isHigh(b) ? symOf(b) + ' ' : '') + label(b), id: b })) },
+      { t: 'Linked words', col: '#a9c4ee', leaves: linked.map(([b]) => ({ t: symOf(b) + ' ' + label(b), id: b })) },
       { t: 'Cultures', col: '#f0cd96', leaves: cultLeaves }
     ];
     const W = 392, LH = 22, colX = [12, 206];
@@ -128,7 +152,7 @@
     });
     const pillW = c.label.length * 11 + 58;
     out += `<rect x="${W / 2 - pillW / 2}" y="${yC - 18}" width="${pillW}" height="36" rx="18" fill="#16213d" stroke="#8fb8ff" stroke-opacity=".8"/>`;
-    out += `<text x="${W / 2}" y="${yC + 6}" text-anchor="middle" style="font-weight:600;font-size:17px"><tspan style="font-family:${SYMF.replace(/"/g, "'")};fill:#f0c96a">${symOf(id)}</tspan> ${esc(c.label)}</text>`;
+    out += `<text x="${W / 2}" y="${yC + 6}" text-anchor="middle" style="font-weight:600;font-size:17px"><tspan style="font-family:${EMOF.replace(/"/g, "'")}">${symOf(id)}</tspan> ${esc(c.label)}</text>`;
     return out + '</svg>';
   }
 
@@ -139,9 +163,9 @@
     const s = stats[id];
     const list = s.items.slice().sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'riddle' ? -1 : 1));
     drawerBody.innerHTML = `
-      <div class="d-head"><span class="d-sym" aria-hidden="true">${symOf(id)}</span>
+      <div class="d-head"><span class="d-sym emo lit" aria-hidden="true">${symOf(id)}</span>
         <div><h2>${esc(label(id))}</h2><span class="d-rank">#${s.rank} of ${ids.length}${isHigh(id) ? ' · high symbolism' : ''}</span></div></div>
-      <p class="d-symnote">${esc(D.symbols[id][1])}</p>
+      <p class="d-symnote">${D.concepts[id].sign ? `<span class="d-sign">${D.concepts[id].sign}</span>` : ''}${esc(D.concepts[id].note)}</p>
       <div class="d-stats">
         <div><b>${s.score}</b><span>weight</span></div>
         <div><b>${s.R}</b><span>uses</span></div>
@@ -152,10 +176,9 @@
       ${mindmap(id)}
       <h3>Riddles &amp; sayings</h3>
       <ul class="d-items">${list.map(i => {
-        const L = langOf[i.culture];
         return `<li class="${i.kind}">
           <p class="q">${esc(i.text)}</p>
-          ${i.orig ? `<p class="src" lang="${L ? L.code : ''}"${L && L.dir ? ` dir="${L.dir}"` : ''}>${esc(i.orig)}</p>` : ''}
+          ${i.orig ? `<p class="src"${langAttr(i.culture)}>${esc(i.orig)}</p>` : ''}
           <span class="src">${i.kind === 'riddle' ? 'Riddle' : 'Saying'} · ${esc(i.culture)}${i.src && i.src !== 'Saying' ? ' · ' + esc(i.src) : ''}</span>
           <details><summary>${i.kind === 'riddle' ? 'Answer' : 'Meaning'}</summary>${esc(i.answer)}</details>
         </li>`;
@@ -189,9 +212,12 @@
   const tip = $('#tip'), strikeBtn = $('#strike');
   let W = 0, H = 0, dpr = 1, cx = 0, cy = 0, rx = 0, ry = 0, k = 1;
 
+  // The storm shows the heaviest words; the rest live in the atlas below.
+  const STORM_N = 32, STORM_N_SMALL = 20;
+  const sids = ranked.slice(0, STORM_N);
   // Force layout in a unit square: linked words pull together, all words push apart.
-  const idx = Object.fromEntries(ids.map((id, i) => [id, i]));
-  const P = ids.map(() => ({ x: rnd() * 2 - 1, y: rnd() * 2 - 1 }));
+  const idx = Object.fromEntries(sids.map((id, i) => [id, i]));
+  const P = sids.map(() => ({ x: rnd() * 2 - 1, y: rnd() * 2 - 1 }));
   for (let it = 0; it < 500; it++) {
     const F = P.map(() => ({ x: 0, y: 0 }));
     for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) {
@@ -199,8 +225,8 @@
       const d2 = dx * dx + dy * dy + 1e-4, d = Math.sqrt(d2), f = 0.012 / d2;
       F[i].x += dx / d * f; F[i].y += dy / d * f; F[j].x -= dx / d * f; F[j].y -= dy / d * f;
     }
-    ids.forEach((a, i) => stats[a].links.forEach((w, b) => {
-      const j = idx[b]; if (j <= i) return;
+    sids.forEach((a, i) => stats[a].links.forEach((w, b) => {
+      const j = idx[b]; if (j === undefined || j <= i) return;
       const dx = P[j].x - P[i].x, dy = P[j].y - P[i].y, d = Math.hypot(dx, dy) || 1e-3;
       const f = (d - 0.4) * 0.006 * w;
       F[i].x += dx / d * f; F[i].y += dy / d * f; F[j].x -= dx / d * f; F[j].y -= dy / d * f;
@@ -214,11 +240,11 @@
   const ext = a => [Math.min(...a), Math.max(...a)];
   const [x0, x1] = ext(P.map(p => p.x)), [y0, y1] = ext(P.map(p => p.y));
 
-  const nodes = ids.map((id, i) => ({
+  const nodes = sids.map((id, i) => ({
     id, s: stats[id],
     nx: ((P[i].x - x0) / (x1 - x0 || 1)) * 2 - 1,
     ny: ((P[i].y - y0) / (y1 - y0 || 1)) * 2 - 1,
-    x: 0, y: 0, fs: 14, w: 0, top: 0, bot: 0, ph: rnd() * 6.28, glow: 0
+    x: 0, y: 0, fs: 14, w: 0, top: 0, bot: 0, ph: rnd() * 6.28, glow: 0, show: true
   }));
 
   function shortText(t) {
@@ -232,7 +258,7 @@
   const frags = items.map(it => ({
     it, label: shortText(it.text),
     r0: 0.16 + Math.pow(rnd(), 0.75) * 0.86, a: rnd() * Math.PI * 2,
-    sp: 0.6 + rnd() * 0.8, ph: rnd() * 6.28, x: 0, y: 0, w: 0, frozen: false, glow: 0
+    sp: 0.6 + rnd() * 0.8, ph: rnd() * 6.28, x: 0, y: 0, w: 0, frozen: false, glow: 0, show: true, keep: rnd()
   }));
   const streaks = Array.from({ length: 150 }, () => ({
     r: 0.04 + rnd() * 1.1, a: rnd() * Math.PI * 2, sp: 0.7 + rnd() * 1.6, len: 0.05 + rnd() * 0.16, al: 0.04 + rnd() * 0.1
@@ -251,13 +277,15 @@
     cx = W / 2; cy = H * 0.55; rx = W * 0.52; ry = H * 0.5;
 
     // measure
-    frags.forEach(f => { ctx.font = fragFont(f); f.w = ctx.measureText(f.label).width; });
+    const small = W < 720;
+    frags.forEach(f => { f.show = !small || f.keep < 0.5; ctx.font = fragFont(f); f.w = ctx.measureText(f.label).width; });
     const spanX = W < 720 ? W * 0.4 : W * 0.37, spanY = H * 0.29;
     nodes.forEach(n => {
+      n.show = n.s.rank <= (small ? STORM_N_SMALL : STORM_N);
       n.fs = Math.round((13 + n.s.score * 0.15) * k);
       ctx.font = nodeFont(n);
       n.w = ctx.measureText(label(n.id)).width;
-      n.top = n.fs * 0.75 + (isHigh(n.id) ? n.fs * 1.3 : 0);
+      n.top = n.fs * 0.75 + n.fs * 1.2;
       n.bot = n.fs * 0.45;
       n.x = cx + n.nx * spanX; n.y = cy + n.ny * spanY;
     });
@@ -269,8 +297,10 @@
     for (let it = 0; it < 120; it++) {
       for (let i = 0; i < nodes.length; i++) {
         const a = nodes[i];
+        if (!a.show) continue;
         for (let j = i + 1; j < nodes.length; j++) {
           const b = nodes[j];
+          if (!b.show) continue;
           const ox = (a.w + b.w) / 2 + 14 - Math.abs(a.x - b.x);
           const oyA = a.y < b.y ? (a.y + a.bot) - (b.y - b.top) : (b.y + b.bot) - (a.y - a.top);
           const oy = oyA + 8;
@@ -313,13 +343,13 @@
     lit = { id, t0: performance.now(), bolts: [main, branch] };
     lastStrikeId = id;
     const s = stats[id];
-    strikeBtn.innerHTML = `<span class="s-sym" aria-hidden="true">${symOf(id)}</span><b>${esc(label(id))}</b> · weight ${s.score}<small>In ${s.R} riddles and sayings from ${s.C} cultures. Open its mind map →</small>`;
+    strikeBtn.innerHTML = `<span class="s-sym emo lit" aria-hidden="true">${symOf(id)}</span><b>${esc(label(id))}</b> · weight ${s.score}<small>In ${s.R} riddles and sayings from ${s.C} cultures. Open its mind map →</small>`;
     strikeBtn.dataset.word = id;
     strikeBtn.hidden = false;
   }
   function pickStrike() {
     // Heavier words are struck more often.
-    const pool = ranked.slice(0, 16).filter(id => id !== lastStrikeId);
+    const pool = nodes.filter(n => n.show).slice(0, 16).map(n => n.id).filter(id => id !== lastStrikeId);
     const wts = pool.map(id => Math.pow(stats[id].score, 2));
     let r = Math.random() * wts.reduce((a, b) => a + b, 0);
     for (let i = 0; i < pool.length; i++) { r -= wts[i]; if (r <= 0) return pool[i]; }
@@ -328,10 +358,10 @@
 
   /* ---- tooltip ---- */
   function tipHTML(f, isPinned) {
-    const it = f.it, L = langOf[it.culture];
+    const it = f.it;
     return `${isPinned ? '<button class="t-close" type="button" aria-label="Close">×</button>' : ''}
       <p class="t-text">${esc(it.text)}</p>
-      ${it.orig ? `<p class="t-orig" lang="${L ? L.code : ''}"${L && L.dir ? ` dir="${L.dir}"` : ''}>${esc(it.orig)}</p>` : ''}
+      ${it.orig ? `<p class="t-orig"${langAttr(it.culture)}>${esc(it.orig)}</p>` : ''}
       <p class="t-src">${it.kind === 'riddle' ? 'Riddle' : 'Saying'} · ${esc(it.culture)}${it.src && it.src !== 'Saying' ? ' · ' + esc(it.src) : ''}</p>
       ${isPinned
         ? `<p class="t-answer"><b>${it.kind === 'riddle' ? 'Answer' : 'Meaning'}:</b> ${esc(it.answer)}</p>`
@@ -370,10 +400,12 @@
   function hitTest(px, py) {
     for (let i = nodes.length - 1; i >= 0; i--) {
       const n = nodes[i];
+      if (!n.show) continue;
       if (Math.abs(px - n.x) < n.w / 2 + 6 && py > n.y - n.top && py < n.y + n.bot + 4) return { node: n };
     }
     for (let i = frags.length - 1; i >= 0; i--) {
       const f = frags[i];
+      if (!f.show) continue;
       if (Math.abs(px - f.x) < f.w / 2 + 4 && Math.abs(py - f.y) < 10 * k + 2) return { frag: f };
     }
     return null;
@@ -469,10 +501,11 @@
     }
 
     // threads from the focused word to its riddles
-    if (focus && focusStrength > 0) {
-      const n = nodes[idx[focus]];
+    const fn = focus !== null && idx[focus] !== undefined ? nodes[idx[focus]] : null;
+    if (fn && fn.show && focusStrength > 0) {
+      const n = fn;
       ctx.lineWidth = 1;
-      for (const f of frags) if (f.glow > 0.05) {
+      for (const f of frags) if (f.show && f.glow > 0.05) {
         ctx.strokeStyle = `rgba(143,184,255,${0.28 * f.glow})`;
         ctx.beginPath(); ctx.moveTo(n.x, n.y - n.fs * 0.3);
         ctx.quadraticCurveTo((n.x + f.x) / 2, (n.y + f.y) / 2 - 30, f.x, f.y);
@@ -482,8 +515,9 @@
 
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const f of frags) {
+      if (!f.show) continue;
       const isHover = f === hover || f === pinned;
-      let a = focus ? 0.16 + 0.8 * f.glow : 0.34;
+      let a = focus ? 0.13 + 0.85 * f.glow : 0.27;
       if (isHover) a = 1;
       ctx.font = fragFont(f);
       const col = f.it.kind === 'riddle' ? '169,196,238' : '240,205,150';
@@ -501,6 +535,7 @@
 
     // words
     for (const n of nodes) {
+      if (!n.show) continue;
       const on = n.id === focus;
       n.glow += ((on ? focusStrength : 0) - n.glow) * Math.min(1, dt * 7);
       const y = n.y + Math.sin(T * 0.6 + n.ph) * 3;
@@ -512,12 +547,14 @@
         ctx.fillStyle = g;
         ctx.fillRect(n.x - n.w - 60, y - n.top - 60, n.w * 2 + 120, n.top + 120);
       }
-      if (isHigh(n.id)) {
-        ctx.font = `${Math.round(n.fs * 1.25)}px ${SYMF}`;
-        ctx.shadowColor = 'rgba(240,201,106,.9)'; ctx.shadowBlur = 6 + 18 * n.glow;
-        ctx.fillStyle = `rgba(240,201,106,${(0.75 + 0.25 * n.glow) * dim})`;
-        ctx.fillText(symOf(n.id), n.x, y - n.fs * 1.15);
-      }
+      // symbol: gold-tinted emoji; it takes its true colours while the word is lit
+      ctx.font = `${Math.round(n.fs * 1.05)}px ${EMOF}`;
+      ctx.globalAlpha = (isHigh(n.id) ? 0.95 : 0.8) * dim;
+      if (n.glow < 0.5) ctx.filter = EMO_TINT;
+      ctx.shadowColor = n.glow > 0.05 ? 'rgba(143,184,255,.9)' : 'rgba(240,201,106,.55)';
+      ctx.shadowBlur = (isHigh(n.id) ? 8 : 4) + 18 * n.glow;
+      ctx.fillText(symOf(n.id), n.x, y - n.fs * 1.12);
+      ctx.filter = 'none'; ctx.globalAlpha = 1;
       ctx.font = nodeFont(n);
       ctx.shadowColor = n.glow > 0.05 ? '#8fb8ff' : 'rgba(7,10,18,.9)';
       ctx.shadowBlur = n.glow > 0.05 ? 20 * n.glow : 8;
@@ -533,7 +570,7 @@
   requestAnimationFrame(frame);
 
   // Re-measure once the web fonts (and the symbol fonts) are in.
-  const allSyms = Object.values(D.symbols).map(s => s[0]).join('');
+  const allSyms = Object.values(D.concepts).map(c => c.sign || '').join('');
   Promise.race([
     Promise.all([
       document.fonts.load(`600 20px "IBM Plex Sans"`),
@@ -658,5 +695,5 @@
   }
   runLoader();
   // Small hook for the banner script (scripts/og.mjs).
-  window.RS = { strike, cultureCount, riddles: D.riddles.length, sayings: D.sayings.length };
+  window.RS = { strike, cultureCount, riddles: D.riddles.length, sayings: D.sayings.length, words: ids.length };
 })();
