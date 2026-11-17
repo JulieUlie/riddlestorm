@@ -130,7 +130,7 @@
     const botN = Math.max(br[2].leaves.length, br[3].leaves.length);
     const yC = topN * LH + 64;
     const H = yC + 44 + botN * LH + 18;
-    let out = `<svg class="mindmap" viewBox="0 0 ${W} ${H}" role="img" aria-label="Mind map of ${esc(c.label)}">`;
+    let out = `<svg class="mindmap" viewBox="0 0 ${W} ${H}" role="group" aria-label="Mind map of ${esc(c.label)}">`;
     br.forEach((b, i) => {
       const x = colX[i % 2], top = i < 2;
       const hubY = top ? yC - 34 : yC + 44;
@@ -374,6 +374,8 @@
     const fork = main[Math.floor(main.length * (0.35 + Math.random() * 0.25))];
     const branch = boltPath(fork[0], fork[1], fork[0] + (Math.random() - 0.5) * 220, fork[1] + 80 + Math.random() * 120, 0.5);
     lit = { id, t0: performance.now(), bolts: [main, branch] };
+    // every strike (automatic or not) restarts the clock for the next automatic one
+    nextStrike = lit.t0 + (reduce ? 7000 : 3600 + Math.random() * 1800);
     lastStrikeId = id;
     const s = stats[id];
     strikeBtn.innerHTML = `<span class="s-sym emo lit" aria-hidden="true">${symOf(id)}</span><b>${esc(label(id))}</b> · weight ${s.score}<small>In ${s.R} riddles and sayings from ${s.C} cultures. Open its mind map →</small>`;
@@ -497,7 +499,6 @@
     // strikes: automatic while nothing is selected or hovered
     if (started && !sel && !hoverNode && now > nextStrike) {
       strike(pickStrike());
-      nextStrike = now + (reduce ? 7000 : 3600 + Math.random() * 1800);
     }
     const le = lit ? (now - lit.t0) / 1000 : 99;
     const litStrength = lit ? (le < 2.4 ? 1 : Math.max(0, 1 - (le - 2.4) / 1.0)) : 0;
@@ -642,7 +643,7 @@
 
     function draw(now) {
       if (done) return;
-      const e = now - t0, w = innerWidth, h = innerHeight, mx = w / 2, my = h / 2;
+      const e = Math.max(0, now - t0), w = innerWidth, h = innerHeight, mx = w / 2, my = h / 2;
       const R = Math.max(w, h) * 0.62;
       g.clearRect(0, 0, w, h);
       g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -721,6 +722,10 @@
     requestAnimationFrame(draw);
   }
   runLoader();
-  // Small hook for the banner script (scripts/og.mjs).
-  window.RS = { strike, cultureCount, riddles: D.riddles.length, sayings: D.sayings.length, words: ids.length };
+  // Small hook for the banner script (scripts/og.mjs) and the Playwright tests: where things are on the canvas.
+  window.RS = {
+    strike, cultureCount, riddles: D.riddles.length, sayings: D.sayings.length, words: ids.length,
+    nodes: () => nodes.filter(n => n.show).map(n => ({ id: n.id, x: n.x, y: n.y + Math.sin(T * 0.6 + n.ph) * 3 })),
+    frags: () => frags.filter(f => f.show).map(f => ({ id: f.it.id, kind: f.it.kind, text: f.it.text, x: f.x, y: f.y, w: f.w }))
+  };
 })();
