@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Riddlestorm</title>
+  <meta name="description" content="A storm of riddles and sayings from many cultures. Lightning shows which words people keep returning to, and what those words could mean for ideas and business.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Riddlestorm">
+  <meta property="og:description" content="A storm of riddles and sayings from 21 cultures. Lightning shows which words matter most to people.">
+  <meta property="og:url" content="https://riddlestorm.julietous.workers.dev/">
+  <meta property="og:image" content="https://riddlestorm.julietous.workers.dev/og-20261117.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://riddlestorm.julietous.workers.dev/og-20261117.jpg">
+  <meta name="theme-color" content="#070a12">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Spectral:ital,wght@0,400;0,600;1,400&family=Noto+Sans+Symbols&family=Noto+Sans+Symbols+2&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <div id="loader" class="loader" aria-hidden="true">
+    <canvas id="loaderCanvas"></canvas>
+    <div class="loader-title">
+      <span class="loader-name">Riddlestorm</span>
+      <span class="loader-sub">gathering riddles from many cultures</span>
+    </div>
+    <button id="skip" class="skip" type="button">Skip</button>
+  </div>
+
+  <header class="top">
+    <a class="brand" href="#storm"><span class="brand-mark" aria-hidden="true">☿</span> Riddlestorm</a>
+    <nav aria-label="Sections">
+      <a href="#storm">Storm</a>
+      <a href="#ranking">Ranking</a>
+      <a href="#languages">Languages</a>
+      <a href="#method">Method</a>
+    </nav>
+  </header>
+
+  <section id="storm" class="storm" aria-label="Storm of riddles and sayings">
+    <canvas id="stormCanvas"></canvas>
+    <div class="storm-intro">
+      <h1>Which words hold the most meaning?</h1>
+      <p>Riddles and sayings from many cultures swirl past. Lightning picks out the words they keep returning to. Hover a riddle to read it, click a word to open its mind map.</p>
+    </div>
+    <button id="strike" class="strike" type="button" hidden></button>
+    <div id="tip" class="tip" hidden></div>
+    <div class="legend" aria-hidden="true">
+      <span><i class="dot riddle"></i>Riddle</span>
+      <span><i class="dot saying"></i>Saying</span>
+      <span><i class="sym">☥</i>High-symbol word</span>
+    </div>
+  </section>
+
+  <main>
+    <section id="ranking" class="section">
+      <h2>Symbolic weight</h2>
+      <p class="lede">Each word scores on how many riddles and sayings use it, how many cultures share it, and how many other meanings it connects to. The words at the top are the ones people across the world keep coming back to, and the ones that carry the most weight when you say them to someone.</p>
+      <ol id="rankList" class="rank"></ol>
+    </section>
+
+    <section id="languages" class="section">
+      <h2>Five languages, one storm</h2>
+      <p class="lede">Typical riddles and sayings from five languages, with the meanings they carry. Different words, the same few ideas underneath.</p>
+      <div id="langGrid" class="lang-grid"></div>
+    </section>
+
+    <section id="method" class="section method">
+      <h2>How it works</h2>
+      <div class="method-grid">
+        <div>
+          <h3>The score</h3>
+          <p><code>weight = uses + 2 × cultures + ½ × links</code>, scaled so the top word is 100. Spread across cultures counts double, because a word that matters in many places says more about people than a word one tradition repeats.</p>
+        </div>
+        <div>
+          <h3>The data</h3>
+          <p><span id="countLine"></span> Texts are short retellings, not translations. Each one is tagged by hand with the meanings it touches.</p>
+        </div>
+        <div>
+          <h3>Symbols</h3>
+          <p>The top words get a traditional sign: alchemical elements, planet signs, the ankh, the ensō. They are Unicode characters drawn with Google's Noto symbol fonts.</p>
+        </div>
+        <div>
+          <h3>Opportunities</h3>
+          <p>The mind map's “opportunities” are starting points for brainstorming, not market research: what a word tends to make people feel, and where that feeling is already sold.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <aside id="drawer" class="drawer" aria-label="Word details" hidden>
+    <button id="drawerClose" class="drawer-close" type="button" aria-label="Close">×</button>
+    <div id="drawerBody"></div>
+  </aside>
+
+  <script src="data.js?v=2"></script>
+  <script src="app.js?v=2"></script>
+</body>
+</html>

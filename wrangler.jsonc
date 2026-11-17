@@ -1,0 +1,10 @@
+// Cloudflare Worker config for riddlestorm.julietous.workers.dev.
+// Publish with: npx wrangler deploy (from this folder). Only ./site is published.
+{
+  "name": "riddlestorm",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./site",
+    "html_handling": "auto-trailing-slash"
+  }
+}
