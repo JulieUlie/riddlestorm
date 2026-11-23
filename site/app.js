@@ -55,7 +55,8 @@
   const cultureCount = new Set(items.map(i => i.culture)).size;
 
   /* ================= static sections ================= */
-  const chip = id => `<button type="button" class="chip" data-word="${id}"><span class="emo">${symOf(id)}</span>${esc(label(id))}</button>`;
+  const LANG_SHOW = 4; // texts per language card before "Show more"
+  const chip = id =>`<button type="button" class="chip" data-word="${id}"><span class="emo">${symOf(id)}</span>${esc(label(id))}</button>`;
 
   $('#rankList').innerHTML = ranked.map(id => {
     const s = stats[id];
@@ -78,10 +79,11 @@
     its.forEach(i => i.m.forEach(k => { counts[k] = (counts[k] || 0) + 1; }));
     const leans = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || stats[b].raw - stats[a].raw).slice(0, 3);
     const dir = L.dir ? ` dir="${L.dir}"` : '';
+    const more = its.length - LANG_SHOW;
     return `<article class="lang">
       <header><h3>${esc(L.name)}</h3><span class="native" lang="${L.code}"${dir}>${esc(L.native)}</span></header>
       <div class="leans">Leans on<div class="chips">${leans.map(chip).join('')}</div></div>
-      <ul>${its.map(i => `<li>
+      <ul id="lang-${L.code}">${its.map((i, n) => `<li${n >= LANG_SHOW ? ' class="more"' : ''}>
         <span class="kind ${i.kind}">${i.kind === 'riddle' ? 'Riddle' : 'Saying'}</span>
         ${i.orig ? `<p class="orig" lang="${L.code}"${dir}>${esc(i.orig)}</p>` : ''}
         <p class="trans">${esc(i.text)}</p>
@@ -90,8 +92,17 @@
           : `<p class="note">${esc(i.answer)}</p>`}
         <div class="chips">${i.m.map(chip).join('')}</div>
       </li>`).join('')}</ul>
+      ${more > 0 ? `<button type="button" class="lang-more" aria-expanded="false" aria-controls="lang-${L.code}" data-more="${more}">Show ${more} more</button>` : ''}
     </article>`;
   }).join('');
+  // Each card opens with a few texts; the rest fold out, so the page stays short on phones.
+  $('#langGrid').addEventListener('click', e => {
+    const b = e.target.closest('.lang-more');
+    if (!b) return;
+    const open = b.closest('.lang').classList.toggle('open');
+    b.setAttribute('aria-expanded', String(open));
+    b.textContent = open ? 'Show fewer' : `Show ${b.dataset.more} more`;
+  });
 
   // Atlas search: word, what it evokes, opportunities, symbol note.
   const search = $('#atlasSearch'), atlasCount = $('#atlasCount');
@@ -293,6 +304,9 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     k = clamp(W / 1300, 0.78, 1.1);
     cx = W / 2; cy = H * 0.55; rx = W * 0.52; ry = H * 0.5;
+    // a tooltip placed for the old size would float in the wrong spot (or off screen)
+    if (pinned) unpin();
+    tip.hidden = true;
 
     // measure
     const small = W < 720;
@@ -477,6 +491,11 @@
   /* ---- render loop ---- */
   let visible = true, last = performance.now(), T = 0, started = false;
   new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(stormEl);
+  // the header turns solid once the storm has scrolled away under it
+  const topBar = $('.top');
+  const solidTop = () => topBar.classList.toggle('solid', scrollY > stormEl.offsetHeight - topBar.offsetHeight);
+  addEventListener('scroll', solidTop, { passive: true });
+  solidTop();
 
   function drawBolt(pts, width, alpha) {
     ctx.beginPath();
@@ -610,6 +629,7 @@
   ]).catch(() => {}).then(resize);
 
   /* ================= loader ================= */
+  let introMs = null; // how long the intro was up (for the tests)
   function runLoader() {
     const el = $('#loader'), c = $('#loaderCanvas'), g = c.getContext('2d');
     const total = reduce ? 500 : 1250, litAt = reduce ? 80 : 780;
@@ -713,6 +733,7 @@
       if (!location.hash) scrollTo(0, 0);
       removeEventListener('resize', size);
       started = true;
+      introMs = performance.now() - t0;
       nextStrike = performance.now() + 700;
       setTimeout(() => el.remove(), 350);
     }
@@ -725,6 +746,7 @@
   // Small hook for the banner script (scripts/og.mjs) and the Playwright tests: where things are on the canvas.
   window.RS = {
     strike, cultureCount, riddles: D.riddles.length, sayings: D.sayings.length, words: ids.length,
+    introMs: () => introMs,
     nodes: () => nodes.filter(n => n.show).map(n => ({ id: n.id, x: n.x, y: n.y + Math.sin(T * 0.6 + n.ph) * 3 })),
     frags: () => frags.filter(f => f.show).map(f => ({ id: f.it.id, kind: f.it.kind, text: f.it.text, x: f.x, y: f.y, w: f.w }))
   };

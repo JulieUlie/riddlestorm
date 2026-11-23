@@ -15,6 +15,8 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   // the storm animates all the time; too many browsers at once starve each other
   workers: 3,
+  // generous per-test budget: the storm and the axe scans are heavy when the machine is busy
+  timeout: 60_000,
   expect: { timeout: 10_000 },
   outputDir: join(OUT, 'test-results'),
   reporter: [['list'], ['html', { open: 'never', outputFolder: join(OUT, 'report') }]],

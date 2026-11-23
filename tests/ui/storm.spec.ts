@@ -28,7 +28,7 @@ const test = base.extend<{ storm: Page; errors: string[] }>({
   errors: async ({ page }, use) => { await use(watchErrors(page)); },
   storm: async ({ page, errors }, use) => {
     await offlineFonts(page);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await ready(page);
     await use(page);
     expect(errors, 'no console or page errors').toEqual([]);
@@ -39,13 +39,14 @@ test.describe('Intro', () => {
   test('plays briefly, then shows the storm from the top @mobile', async ({ page }) => {
     const errors = watchErrors(page);
     await offlineFonts(page);
-    await page.goto('/');
-    await expect(page.locator('#loader')).toBeVisible();
-    const started = await page.evaluate(() => performance.now());
+    // 'load' can come after the short intro on a busy machine, so look at the intro from DOMContentLoaded on
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#loader')).toBeAttached();
     await ready(page);
-    const ended = await page.evaluate(() => performance.now());
-    // about 1.25 s of animation plus the fade; well under the old 4 s
-    expect(ended - started).toBeLessThan(2_500);
+    // the page measures how long the intro was up: about 1.25 s, well under the old 4 s
+    const introMs = await page.evaluate(() => (window as any).RS.introMs());
+    expect(introMs).toBeGreaterThan(400);
+    expect(introMs).toBeLessThan(2_500);
     expect(await page.evaluate(() => scrollY)).toBe(0);
     await expect(page.locator('body')).not.toHaveClass(/loading/);
     expect(errors).toEqual([]);
@@ -63,7 +64,7 @@ test.describe('Intro', () => {
   test('is even shorter with reduced motion', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await offlineFonts(page);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#loader')).toHaveCount(0, { timeout: 1_500 });
   });
 });
@@ -105,7 +106,7 @@ test.describe('Storm', () => {
     // reduced motion slows the storm down so the pointer can follow a riddle
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await offlineFonts(page);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await ready(page);
     // wait for a riddle in clear space: away from the words, with nothing drawn on top of it
     const target = await (await page.waitForFunction(() => {
@@ -128,6 +129,16 @@ test.describe('Storm', () => {
     await expect(tip.locator('.t-answer')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(tip).toBeHidden();
+    // a pinned tooltip does not stay behind at a stale spot when the window changes size
+    await page.mouse.click(p.x, p.y);
+    await expect(tip).toHaveClass(/pinned/);
+    await page.setViewportSize({ width: 1100, height: 800 });
+    await expect(tip).toBeHidden();
+  });
+
+  test('the intro text sits on a shade, so riddles drifting behind it stay out of the way', async ({ storm }) => {
+    const bg = await storm.evaluate(() => getComputedStyle(document.querySelector('.storm-intro')!, '::before').backgroundColor);
+    expect(bg).toMatch(/rgba\(7, 10, 18, 0\.[89]\d*\)/);
   });
 
   test('draws a frame in a few milliseconds', async ({ storm }) => {
@@ -162,6 +173,25 @@ test.describe('Mind map drawer', () => {
     await expect(storm.locator('#drawer .d-sym')).toHaveText(await storm.evaluate(id => (window as any).RS_DATA.concepts[id].e, target));
   });
 
+  test('is opaque, so the page never shows through @mobile', async ({ storm }) => {
+    await storm.locator('#rankList [data-word="time"]').click();
+    const bg = await storm.locator('#drawer').evaluate(el => getComputedStyle(el).backgroundColor);
+    expect(bg).toMatch(/^rgb\(/);
+  });
+
+  test('linked words in the mind map work from the keyboard', async ({ storm }) => {
+    await storm.locator('#rankList [data-word="time"]').click();
+    const link = storm.locator('#drawer .mm-link').first();
+    const target = await link.getAttribute('data-word');
+    // focus sits on the close button; one Tab reaches the first linked word
+    await expect(storm.locator('#drawerClose')).toBeFocused();
+    await storm.keyboard.press('Tab');
+    await expect(link).toBeFocused();
+    expect(await link.evaluate(el => getComputedStyle(el).textDecorationLine)).toContain('underline');
+    await storm.keyboard.press('Enter');
+    await expect(storm.locator('#drawer h2')).toHaveText(await storm.evaluate(id => (window as any).RS_DATA.concepts[id].label, target));
+  });
+
   test('Escape closes it and gives focus back', async ({ storm }) => {
     const row = storm.locator('#rankList [data-word="water"]');
     await row.focus();
@@ -194,6 +224,11 @@ test.describe('Word atlas', () => {
     const syms = await storm.locator('#rankList .r-sym').allTextContents();
     expect(syms.every(s => s.trim().length > 0)).toBe(true);
     await expect(storm.locator('#atlasCount')).toHaveText('50 words');
+    // the stats line keeps to one line of its own ("39 / links" used to break apart)
+    const lh = await storm.locator('#rankList .r-meta').first().evaluate(el => parseFloat(getComputedStyle(el).lineHeight));
+    for (const h of await storm.locator('#rankList .r-meta').evaluateAll(els => els.map(e => e.getBoundingClientRect().height))) {
+      expect(h).toBeLessThan(lh * 1.5);
+    }
   });
 
   test('search filters by word, feeling or market', async ({ storm }) => {
@@ -222,6 +257,21 @@ test.describe('Five languages', () => {
     await expect(cards.filter({ hasText: 'Chinese' }).locator('.orig').first()).toHaveAttribute('lang', 'zh');
   });
 
+  test('each card shows four texts and folds out the rest @mobile', async ({ storm }) => {
+    const card = storm.locator('.lang').first();
+    const all = await card.locator('ul > li').count();
+    await expect(card.locator('ul > li:visible')).toHaveCount(4);
+    const more = card.locator('.lang-more');
+    await expect(more).toHaveText(`Show ${all - 4} more`);
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+    await more.click();
+    await expect(card.locator('ul > li:visible')).toHaveCount(all);
+    await expect(more).toHaveAttribute('aria-expanded', 'true');
+    await expect(more).toHaveText('Show fewer');
+    await more.click();
+    await expect(card.locator('ul > li:visible')).toHaveCount(4);
+  });
+
   test('meaning chips open the word', async ({ storm }) => {
     const chip = storm.locator('.lang .leans .chip').first();
     const id = await chip.getAttribute('data-word');
@@ -231,6 +281,15 @@ test.describe('Five languages', () => {
 });
 
 test.describe('Quality', () => {
+  test('the header turns solid below the storm @mobile', async ({ storm }) => {
+    const top = storm.locator('header.top');
+    await expect(top).not.toHaveClass(/solid/);
+    await storm.locator('#ranking').evaluate(el => el.scrollIntoView({ behavior: 'instant' }));
+    await expect(top).toHaveClass(/solid/);
+    await storm.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+    await expect(top).not.toHaveClass(/solid/);
+  });
+
   test('no horizontal scrolling @mobile', async ({ storm }) => {
     expect(await storm.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
   });
